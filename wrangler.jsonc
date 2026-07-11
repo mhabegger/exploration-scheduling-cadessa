@@ -1,6 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "cadessa",
+  "name": "exploration-scheduling-cadessa",
+  "workers_dev": true,
+  "preview_urls": true,
   "compatibility_date": "2026-07-11",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
@@ -12,23 +14,9 @@
     "mode": "smart"
   },
   "vars": {
-    "APP_ENV": "development",
+    "APP_ENV": "demo",
     "OPENROUTER_MODEL": "anthropic/claude-sonnet-4.5"
   },
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "00000000000000000000000000000000",
-      "localConnectionString": "postgresql://postgres:postgres@localhost:5432/cadessa"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "AUDIO_BUCKET",
-      "bucket_name": "cadessa-audio",
-      "preview_bucket_name": "cadessa-audio-preview"
-    }
-  ],
   "durable_objects": {
     "bindings": [
       {

@@ -4,6 +4,10 @@
   "description": "Autonomous, explainable music programming for playlists and linear radio.",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.6.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "imports": {
     "#/*": "./src/*"
   },

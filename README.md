@@ -129,11 +129,27 @@ Production authentication, workspace authorization, CSRF protection, and rate li
 
 ## Provision cloud resources
 
-Infrastructure-as-code lives in `wrangler.jsonc`. Its all-zero Hyperdrive ID is intentionally a local placeholder.
+Infrastructure-as-code lives in `wrangler.jsonc`. The committed demo configuration intentionally binds only the Durable Object used by the working studio, enables the default `workers.dev` route, and requires no runtime secrets.
+
+### Deploy the credential-free demo with Workers Builds
+
+Connect the repository to a Worker named `exploration-scheduling-cadessa` and use:
+
+| Setting | Value |
+| --- | --- |
+| Production branch | `main` |
+| Build command | `pnpm run build` |
+| Deploy command | `pnpm exec wrangler deploy` |
+| Root directory | `/` |
+| Build variable | `PNPM_VERSION=11.6.0` |
+
+No runtime variables or secrets are required for the demo. The Durable Object namespace and its first SQLite migration are created by Wrangler during deployment. Keep custom routes empty; `workers_dev` and preview URLs are enabled in `wrangler.jsonc`. Your account must have its one-time `workers.dev` subdomain configured in the Cloudflare dashboard.
+
+The Worker name in Cloudflare must match the `name` in `wrangler.jsonc`. If you use a differently named Worker, change that one field before connecting the build.
 
 1. Create a PlanetScale Postgres database and development branch. Store its direct connection URL as the local/CI `DATABASE_URL` secret.
-2. Create a Cloudflare Hyperdrive configuration for that database and replace the placeholder `HYPERDRIVE` ID.
-3. Create private R2 buckets named `cadessa-audio` and `cadessa-audio-preview`, or change the binding names.
+2. Add a Cloudflare Hyperdrive binding named `HYPERDRIVE` when the Postgres repository is connected.
+3. Create private R2 buckets named `cadessa-audio` and `cadessa-audio-preview`, then add the `AUDIO_BUCKET` binding when licensed masters are available.
 4. Copy `.dev.vars.example` to `.dev.vars` for local secrets. Use `wrangler secret put` in production.
 5. Generate bindings and migrate the development branch:
 
