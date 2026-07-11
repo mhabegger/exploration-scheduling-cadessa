@@ -19,7 +19,12 @@
   },
   // The account-specific HYPERDRIVE binding is injected by the Cloudflare
   // Vite plugin from the HYPERDRIVE_ID Workers Builds variable.
-  "hyperdrive": [],
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "db6398ba702f42579558316e0095b95d"
+    }
+  ],
   "durable_objects": {
     "bindings": [
       {
