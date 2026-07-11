@@ -24,7 +24,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
-    "deploy": "pnpm run check && wrangler deploy"
+    "deploy:production": "pnpm run db:migrate && wrangler deploy",
+    "deploy": "pnpm run check && pnpm run deploy:production"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.44.0",

@@ -2,20 +2,36 @@ import { describe, expect, it, vi } from 'vitest'
 import { resolveDatabaseReadiness } from './readiness'
 
 describe('database readiness', () => {
+  const expectedMigration = { tag: '0001_test', version: 1_800_000_000_000 }
+
   it('reports a ready migrated database', async () => {
-    await expect(resolveDatabaseReadiness(async () => ({ schemaReady: true, latencyMs: 18 }))).resolves.toEqual({
+    await expect(resolveDatabaseReadiness(async () => ({
+      schemaReady: true,
+      expectedMigration,
+      appliedMigrationVersion: expectedMigration.version,
+      latencyMs: 18,
+    }))).resolves.toEqual({
       status: 'ready',
       transport: 'hyperdrive',
       schemaReady: true,
+      expectedMigration,
+      appliedMigrationVersion: expectedMigration.version,
       latencyMs: 18,
     })
   })
 
   it('distinguishes a reachable database that still needs migrations', async () => {
-    await expect(resolveDatabaseReadiness(async () => ({ schemaReady: false, latencyMs: 11 }))).resolves.toEqual({
+    await expect(resolveDatabaseReadiness(async () => ({
+      schemaReady: false,
+      expectedMigration,
+      appliedMigrationVersion: null,
+      latencyMs: 11,
+    }))).resolves.toEqual({
       status: 'migration_required',
       transport: 'hyperdrive',
       schemaReady: false,
+      expectedMigration,
+      appliedMigrationVersion: null,
       latencyMs: 11,
     })
   })

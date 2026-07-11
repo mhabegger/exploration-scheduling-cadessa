@@ -97,14 +97,14 @@ pnpm db:migrate
 pnpm db:studio
 ```
 
-`DATABASE_URL` must be a direct PlanetScale Postgres branch URL for Drizzle Kit. Migrations do not run through a Worker binding and never run during Worker startup.
+`DATABASE_URL` must be a direct PlanetScale Postgres branch URL for Drizzle Kit. Migrations never run during Worker startup. Production deployment runs them as a fail-fast pre-deploy step, while local execution remains explicit.
 
 ## API surface
 
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
 | `/api/health` | GET | Worker health, environment, and engine version |
-| `/api/health/database` | GET | Probe Postgres through Hyperdrive and verify that the initial schema is migrated |
+| `/api/health/database` | GET | Probe Postgres through Hyperdrive and compare its Drizzle ledger with the latest committed migration |
 | `/api/schedule` | GET / POST | Generate a synchronous deterministic schedule |
 | `/api/studio/:channelId` | GET | Read the active revision and history; add `?format=csv`, `json`, or `m3u` to download |
 | `/api/studio/:channelId` | POST | Generate, hold, list alternatives, replace, approve, or restore |
@@ -132,20 +132,24 @@ Production authentication, workspace authorization, CSRF protection, and rate li
 
 Infrastructure-as-code lives in `wrangler.jsonc`. The Durable Object is declared there directly. Because a Hyperdrive configuration ID belongs to one Cloudflare account, the Cloudflare Vite plugin injects the `HYPERDRIVE` binding from the `HYPERDRIVE_ID` build variable into the generated Wrangler deployment configuration.
 
-### Deploy the credential-free demo with Workers Builds
+### Deploy with Workers Builds
 
 Connect the repository to a Worker named `exploration-scheduling-cadessa` and use:
 
 | Setting | Value |
 | --- | --- |
 | Production branch | `main` |
-| Build command | `pnpm run build` |
-| Deploy command | `pnpm exec wrangler deploy` |
+| Build command | `pnpm run check` |
+| Production deploy command | `pnpm run deploy:production` |
+| Non-production deploy command | `pnpm exec wrangler versions upload` |
 | Root directory | `/` |
 | Build variable | `PNPM_VERSION=11.6.0` |
 | Build variable | `HYPERDRIVE_ID=<32-character Cloudflare configuration ID>` |
+| Build secret | `DATABASE_URL=<direct migration-role URL>` |
 
-No database credential is stored in the Worker or repository: Hyperdrive owns the PlanetScale origin credentials and gives the Worker a generated `connectionString`. The Durable Object namespace and its first SQLite migration are created by Wrangler during deployment. Keep custom routes empty; `workers_dev` and preview URLs are enabled in `wrangler.jsonc`. Your account must have its one-time `workers.dev` subdomain configured in the Cloudflare dashboard.
+No database credential is stored in the Worker or repository: Hyperdrive owns the PlanetScale origin credentials and gives the Worker a generated `connectionString`. `DATABASE_URL` is an encrypted Workers Builds secret available only to the build environment, not a runtime Worker secret. The Durable Object namespace and its first SQLite migration are created by Wrangler during deployment. Keep custom routes empty; `workers_dev` and preview URLs are enabled in `wrangler.jsonc`. Your account must have its one-time `workers.dev` subdomain configured in the Cloudflare dashboard.
+
+Workers Builds variables are configured per production or preview trigger. Either disable non-production builds or give the preview trigger its own staging `HYPERDRIVE_ID`. Do not add the production `DATABASE_URL` to the preview trigger; previews upload code but deliberately do not migrate production.
 
 The Workers Builds API token must include account-level **Hyperdrive Read** in addition to its normal Workers deployment permissions. Use **Hyperdrive Write** only for the one-time create/update command; the application build does not create database infrastructure.
 
@@ -160,17 +164,38 @@ The Worker name in Cloudflare must match the `name` in `wrangler.jsonc`. If you 
    ```
 
 3. Copy the returned 32-character configuration ID into the Cloudflare Workers Builds variable `HYPERDRIVE_ID`. It is a resource identifier, not the database password.
-4. Apply Drizzle migrations separately with the direct migration-role URL. Drizzle Kit cannot use a Worker binding, and migrations are intentionally not run during Worker startup or every preview deployment:
+4. Add the direct migration-role URL as the encrypted Workers Builds secret `DATABASE_URL`. The production deploy command runs `drizzle-kit migrate` before Wrangler and stops the deployment if migration fails. Drizzle records applied migrations in `drizzle.__drizzle_migrations`, so successful reruns are no-ops. Preview deployments deliberately never mutate the production schema.
+5. For a manual migration or local deployment, provide the same direct TLS URL:
 
    ```powershell
    $env:DATABASE_URL = "postgresql://.../cadessa?sslmode=verify-full"
    pnpm db:migrate
    ```
 
-5. Deploy, then verify `GET /api/health/database`. A `200` response with `status: "ready"` proves the Worker reached the migrated database through Hyperdrive. `migration_required`, `unavailable`, and `unconfigured` responses return `503` without leaking connection details.
-6. Create private R2 buckets named `cadessa-audio` and `cadessa-audio-preview`, then add the `AUDIO_BUCKET` binding when licensed masters are available.
-7. Add provider OAuth applications and encrypted-token storage after the Worker hostname and identity model exist.
-8. Verify and deploy:
+   When Hyperdrive uses a separate least-privilege application role, run these grants once as the migration role after the initial migration, replacing `cadessa_app` with the actual role. The default privileges also cover tables, sequences, and enum types created by future migrations:
+
+   ```sql
+   GRANT USAGE ON SCHEMA public, drizzle TO cadessa_app;
+   GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO cadessa_app;
+   GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO cadessa_app;
+   GRANT USAGE ON TYPE public.channel_kind, public.connection_status,
+     public.provider_kind, public.rotation_kind, public.run_status TO cadessa_app;
+   GRANT SELECT ON ALL TABLES IN SCHEMA drizzle TO cadessa_app;
+
+   ALTER DEFAULT PRIVILEGES IN SCHEMA public
+     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO cadessa_app;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA public
+     GRANT USAGE, SELECT ON SEQUENCES TO cadessa_app;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA public
+     GRANT USAGE ON TYPES TO cadessa_app;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA drizzle
+     GRANT SELECT ON TABLES TO cadessa_app;
+   ```
+
+6. Deploy, then verify `GET /api/health/database`. A `200` response with `status: "ready"` proves the Worker reached the database through Hyperdrive and found the exact latest committed migration in its ledger. `migration_required`, `unavailable`, and `unconfigured` responses return `503` without leaking connection details.
+7. Create private R2 buckets named `cadessa-audio` and `cadessa-audio-preview`, then add the `AUDIO_BUCKET` binding when licensed masters are available.
+8. Add provider OAuth applications and encrypted-token storage after the Worker hostname and identity model exist.
+9. Verify and deploy:
 
    ```bash
    pnpm check
@@ -178,6 +203,8 @@ The Worker name in Cloudflare must match the `name` in `wrangler.jsonc`. If you 
    ```
 
 Cloudflare bindings do not inherit into named Wrangler environments; repeat Hyperdrive, R2, Durable Object, and variable configuration for each environment.
+
+Migration files are immutable after deployment. Use expand/contract changes in production: add backward-compatible schema first, deploy code that can use it second, and remove old columns or constraints in a later release. This keeps the old Worker compatible if a migration succeeds but the subsequent Worker upload fails.
 
 ## Data model
 

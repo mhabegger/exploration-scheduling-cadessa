@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import { sql } from 'drizzle-orm'
 import { Client } from 'pg'
 import * as schema from './schema'
+import { expectedMigration } from './migration-version'
 
 function createDatabase(client: Client) {
   return drizzle(client, { schema })
@@ -29,22 +30,45 @@ export async function withDatabase<T>(hyperdrive: HyperdriveConnection, operatio
 
 export interface DatabaseProbe {
   schemaReady: boolean
+  expectedMigration: typeof expectedMigration
+  appliedMigrationVersion: number | null
   latencyMs: number
 }
 
 export async function probeDatabase(hyperdrive: HyperdriveConnection): Promise<DatabaseProbe> {
   const startedAt = performance.now()
-  const schemaReady = await withDatabase(hyperdrive, async (database) => {
-    const result = await database.execute(sql<{ schemaReady: boolean }>`
+  const migrationState = await withDatabase(hyperdrive, async (database) => {
+    const relations = await database.execute(sql<{ applicationSchemaPresent: boolean; migrationLedgerPresent: boolean }>`
       select
-        current_timestamp as checked_at,
-        to_regclass('public.workspaces') is not null as "schemaReady"
+        to_regclass('public.workspaces') is not null as "applicationSchemaPresent",
+        to_regclass('drizzle.__drizzle_migrations') is not null as "migrationLedgerPresent"
     `)
-    return result.rows[0]?.schemaReady === true
+    const relationState = relations.rows[0]
+
+    if (relationState?.migrationLedgerPresent !== true) {
+      return { applicationSchemaPresent: relationState?.applicationSchemaPresent === true, expectedMigrationApplied: false, appliedMigrationVersion: null }
+    }
+
+    const ledger = await database.execute(sql<{ expectedMigrationApplied: boolean | null; appliedMigrationVersion: string | null }>`
+      select
+        bool_or(created_at = ${expectedMigration.version}) as "expectedMigrationApplied",
+        max(created_at)::text as "appliedMigrationVersion"
+      from drizzle.__drizzle_migrations
+    `)
+    const appliedValue = ledger.rows[0]?.appliedMigrationVersion
+    const appliedMigrationVersion = appliedValue === null || appliedValue === undefined ? null : Number(appliedValue)
+
+    return {
+      applicationSchemaPresent: relationState?.applicationSchemaPresent === true,
+      expectedMigrationApplied: ledger.rows[0]?.expectedMigrationApplied === true,
+      appliedMigrationVersion: Number.isSafeInteger(appliedMigrationVersion) ? appliedMigrationVersion : null,
+    }
   })
 
   return {
-    schemaReady,
+    schemaReady: migrationState.applicationSchemaPresent && migrationState.expectedMigrationApplied,
+    expectedMigration,
+    appliedMigrationVersion: migrationState.appliedMigrationVersion,
     latencyMs: Math.max(0, Math.round(performance.now() - startedAt)),
   }
 }
