@@ -56,7 +56,7 @@ Browser
           └─ OpenRouter boundary for permitted interpretation/explanation
 ```
 
-The working local slice uses a Durable Object as its canonical schedule repository so it requires no database credentials. The included Drizzle schema and PlanetScale/Hyperdrive client are the intended multi-workspace system of record once cloud resources are provisioned.
+The working studio uses a Durable Object as its low-latency schedule coordinator. The Worker now also has an invocation-scoped Drizzle/`pg` connection boundary for PlanetScale Postgres through Hyperdrive, plus a database-readiness endpoint. Moving the remaining studio documents into the included Postgres schema can happen incrementally without changing the UI contract.
 
 ### Core choices
 
@@ -78,7 +78,7 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:3000`. The schedule workflow and exports work without a database, provider account, OpenRouter key, or audio bucket.
+Open `http://localhost:3000`. The schedule workflow and exports still work if Postgres is temporarily unavailable. To exercise the database locally, copy `.env.example` to `.env`, set a local connection string, and keep the placeholder Hyperdrive ID for local emulation only.
 
 Useful checks:
 
@@ -104,6 +104,7 @@ pnpm db:studio
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
 | `/api/health` | GET | Worker health, environment, and engine version |
+| `/api/health/database` | GET | Probe Postgres through Hyperdrive and verify that the initial schema is migrated |
 | `/api/schedule` | GET / POST | Generate a synchronous deterministic schedule |
 | `/api/studio/:channelId` | GET | Read the active revision and history; add `?format=csv`, `json`, or `m3u` to download |
 | `/api/studio/:channelId` | POST | Generate, hold, list alternatives, replace, approve, or restore |
@@ -129,7 +130,7 @@ Production authentication, workspace authorization, CSRF protection, and rate li
 
 ## Provision cloud resources
 
-Infrastructure-as-code lives in `wrangler.jsonc`. The committed demo configuration intentionally binds only the Durable Object used by the working studio, enables the default `workers.dev` route, and requires no runtime secrets.
+Infrastructure-as-code lives in `wrangler.jsonc`. The Durable Object is declared there directly. Because a Hyperdrive configuration ID belongs to one Cloudflare account, the Cloudflare Vite plugin injects the `HYPERDRIVE` binding from the `HYPERDRIVE_ID` build variable into the generated Wrangler deployment configuration.
 
 ### Deploy the credential-free demo with Workers Builds
 
@@ -142,24 +143,34 @@ Connect the repository to a Worker named `exploration-scheduling-cadessa` and us
 | Deploy command | `pnpm exec wrangler deploy` |
 | Root directory | `/` |
 | Build variable | `PNPM_VERSION=11.6.0` |
+| Build variable | `HYPERDRIVE_ID=<32-character Cloudflare configuration ID>` |
 
-No runtime variables or secrets are required for the demo. The Durable Object namespace and its first SQLite migration are created by Wrangler during deployment. Keep custom routes empty; `workers_dev` and preview URLs are enabled in `wrangler.jsonc`. Your account must have its one-time `workers.dev` subdomain configured in the Cloudflare dashboard.
+No database credential is stored in the Worker or repository: Hyperdrive owns the PlanetScale origin credentials and gives the Worker a generated `connectionString`. The Durable Object namespace and its first SQLite migration are created by Wrangler during deployment. Keep custom routes empty; `workers_dev` and preview URLs are enabled in `wrangler.jsonc`. Your account must have its one-time `workers.dev` subdomain configured in the Cloudflare dashboard.
+
+The Workers Builds API token must include account-level **Hyperdrive Read** in addition to its normal Workers deployment permissions. Use **Hyperdrive Write** only for the one-time create/update command; the application build does not create database infrastructure.
 
 The Worker name in Cloudflare must match the `name` in `wrangler.jsonc`. If you use a differently named Worker, change that one field before connecting the build.
 
-1. Create a PlanetScale Postgres database and development branch. Store its direct connection URL as the local/CI `DATABASE_URL` secret.
-2. Add a Cloudflare Hyperdrive binding named `HYPERDRIVE` when the Postgres repository is connected.
-3. Create private R2 buckets named `cadessa-audio` and `cadessa-audio-preview`, then add the `AUDIO_BUCKET` binding when licensed masters are available.
-4. Copy `.dev.vars.example` to `.dev.vars` for local secrets. Use `wrangler secret put` in production.
-5. Generate bindings and migrate the development branch:
+1. Create a PlanetScale Postgres database, an application role, and a separate migration role. PlanetScale requires TLS; use the provided URL with `sslmode=verify-full`.
+2. Create Hyperdrive once, with query caching disabled so administrative reads retain read-after-write behavior:
 
-   ```bash
-   pnpm cf-typegen
+   ```powershell
+   $env:DATABASE_URL = "postgresql://.../cadessa?sslmode=verify-full"
+   pnpm exec wrangler hyperdrive create cadessa-postgres --connection-string="$env:DATABASE_URL" --caching-disabled
+   ```
+
+3. Copy the returned 32-character configuration ID into the Cloudflare Workers Builds variable `HYPERDRIVE_ID`. It is a resource identifier, not the database password.
+4. Apply Drizzle migrations separately with the direct migration-role URL. Drizzle Kit cannot use a Worker binding, and migrations are intentionally not run during Worker startup or every preview deployment:
+
+   ```powershell
+   $env:DATABASE_URL = "postgresql://.../cadessa?sslmode=verify-full"
    pnpm db:migrate
    ```
 
-6. Add provider OAuth applications and encrypted token storage after the Worker hostname and identity model exist.
-7. Verify and deploy:
+5. Deploy, then verify `GET /api/health/database`. A `200` response with `status: "ready"` proves the Worker reached the migrated database through Hyperdrive. `migration_required`, `unavailable`, and `unconfigured` responses return `503` without leaking connection details.
+6. Create private R2 buckets named `cadessa-audio` and `cadessa-audio-preview`, then add the `AUDIO_BUCKET` binding when licensed masters are available.
+7. Add provider OAuth applications and encrypted-token storage after the Worker hostname and identity model exist.
+8. Verify and deploy:
 
    ```bash
    pnpm check

@@ -10,6 +10,7 @@ export const Route = createFileRoute('/api/health')({
         service: 'cadessa',
         environment: env.APP_ENV,
         engine: ENGINE_VERSION,
+        database: env.HYPERDRIVE ? 'hyperdrive-configured' : 'unconfigured',
         timestamp: new Date().toISOString(),
       }, { headers: { 'Cache-Control': 'no-store' } }),
     },

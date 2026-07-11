@@ -18,6 +18,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiScheduleRouteImport } from './routes/api.schedule'
 import { Route as ApiHealthRouteImport } from './routes/api.health'
 import { Route as ApiStudioChannelIdRouteImport } from './routes/api.studio.$channelId'
+import { Route as ApiHealthDatabaseRouteImport } from './routes/api.health.database'
 import { Route as ApiGenerationChannelIdRouteImport } from './routes/api.generation.$channelId'
 
 const LibraryRoute = LibraryRouteImport.update({
@@ -65,6 +66,11 @@ const ApiStudioChannelIdRoute = ApiStudioChannelIdRouteImport.update({
   path: '/api/studio/$channelId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHealthDatabaseRoute = ApiHealthDatabaseRouteImport.update({
+  id: '/database',
+  path: '/database',
+  getParentRoute: () => ApiHealthRoute,
+} as any)
 const ApiGenerationChannelIdRoute = ApiGenerationChannelIdRouteImport.update({
   id: '/api/generation/$channelId',
   path: '/api/generation/$channelId',
@@ -78,9 +84,10 @@ export interface FileRoutesByFullPath {
   '/insights': typeof InsightsRoute
   '/introduction': typeof IntroductionRoute
   '/library': typeof LibraryRoute
-  '/api/health': typeof ApiHealthRoute
+  '/api/health': typeof ApiHealthRouteWithChildren
   '/api/schedule': typeof ApiScheduleRoute
   '/api/generation/$channelId': typeof ApiGenerationChannelIdRoute
+  '/api/health/database': typeof ApiHealthDatabaseRoute
   '/api/studio/$channelId': typeof ApiStudioChannelIdRoute
 }
 export interface FileRoutesByTo {
@@ -90,9 +97,10 @@ export interface FileRoutesByTo {
   '/insights': typeof InsightsRoute
   '/introduction': typeof IntroductionRoute
   '/library': typeof LibraryRoute
-  '/api/health': typeof ApiHealthRoute
+  '/api/health': typeof ApiHealthRouteWithChildren
   '/api/schedule': typeof ApiScheduleRoute
   '/api/generation/$channelId': typeof ApiGenerationChannelIdRoute
+  '/api/health/database': typeof ApiHealthDatabaseRoute
   '/api/studio/$channelId': typeof ApiStudioChannelIdRoute
 }
 export interface FileRoutesById {
@@ -103,9 +111,10 @@ export interface FileRoutesById {
   '/insights': typeof InsightsRoute
   '/introduction': typeof IntroductionRoute
   '/library': typeof LibraryRoute
-  '/api/health': typeof ApiHealthRoute
+  '/api/health': typeof ApiHealthRouteWithChildren
   '/api/schedule': typeof ApiScheduleRoute
   '/api/generation/$channelId': typeof ApiGenerationChannelIdRoute
+  '/api/health/database': typeof ApiHealthDatabaseRoute
   '/api/studio/$channelId': typeof ApiStudioChannelIdRoute
 }
 export interface FileRouteTypes {
@@ -120,6 +129,7 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/schedule'
     | '/api/generation/$channelId'
+    | '/api/health/database'
     | '/api/studio/$channelId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -132,6 +142,7 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/schedule'
     | '/api/generation/$channelId'
+    | '/api/health/database'
     | '/api/studio/$channelId'
   id:
     | '__root__'
@@ -144,6 +155,7 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/schedule'
     | '/api/generation/$channelId'
+    | '/api/health/database'
     | '/api/studio/$channelId'
   fileRoutesById: FileRoutesById
 }
@@ -154,7 +166,7 @@ export interface RootRouteChildren {
   InsightsRoute: typeof InsightsRoute
   IntroductionRoute: typeof IntroductionRoute
   LibraryRoute: typeof LibraryRoute
-  ApiHealthRoute: typeof ApiHealthRoute
+  ApiHealthRoute: typeof ApiHealthRouteWithChildren
   ApiScheduleRoute: typeof ApiScheduleRoute
   ApiGenerationChannelIdRoute: typeof ApiGenerationChannelIdRoute
   ApiStudioChannelIdRoute: typeof ApiStudioChannelIdRoute
@@ -225,6 +237,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiStudioChannelIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/health/database': {
+      id: '/api/health/database'
+      path: '/database'
+      fullPath: '/api/health/database'
+      preLoaderRoute: typeof ApiHealthDatabaseRouteImport
+      parentRoute: typeof ApiHealthRoute
+    }
     '/api/generation/$channelId': {
       id: '/api/generation/$channelId'
       path: '/api/generation/$channelId'
@@ -235,6 +254,18 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface ApiHealthRouteChildren {
+  ApiHealthDatabaseRoute: typeof ApiHealthDatabaseRoute
+}
+
+const ApiHealthRouteChildren: ApiHealthRouteChildren = {
+  ApiHealthDatabaseRoute: ApiHealthDatabaseRoute,
+}
+
+const ApiHealthRouteWithChildren = ApiHealthRoute._addFileChildren(
+  ApiHealthRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ClocksRoute: ClocksRoute,
@@ -242,7 +273,7 @@ const rootRouteChildren: RootRouteChildren = {
   InsightsRoute: InsightsRoute,
   IntroductionRoute: IntroductionRoute,
   LibraryRoute: LibraryRoute,
-  ApiHealthRoute: ApiHealthRoute,
+  ApiHealthRoute: ApiHealthRouteWithChildren,
   ApiScheduleRoute: ApiScheduleRoute,
   ApiGenerationChannelIdRoute: ApiGenerationChannelIdRoute,
   ApiStudioChannelIdRoute: ApiStudioChannelIdRoute,
