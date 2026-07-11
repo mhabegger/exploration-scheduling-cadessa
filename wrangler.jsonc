@@ -1,0 +1,46 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cadessa",
+  "compatibility_date": "2026-07-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "src/server.ts",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "placement": {
+    "mode": "smart"
+  },
+  "vars": {
+    "APP_ENV": "development",
+    "OPENROUTER_MODEL": "anthropic/claude-sonnet-4.5"
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "00000000000000000000000000000000",
+      "localConnectionString": "postgresql://postgres:postgres@localhost:5432/cadessa"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "AUDIO_BUCKET",
+      "bucket_name": "cadessa-audio",
+      "preview_bucket_name": "cadessa-audio-preview"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SCHEDULE_COORDINATOR",
+        "class_name": "ScheduleCoordinator"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ScheduleCoordinator"]
+    }
+  ]
+}

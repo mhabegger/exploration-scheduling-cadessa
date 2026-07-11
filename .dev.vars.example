@@ -1,0 +1,7 @@
+# Copy to .dev.vars for local Worker development. Never commit real credentials.
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/cadessa"
+OPENROUTER_API_KEY=""
+SPOTIFY_CLIENT_ID=""
+SPOTIFY_CLIENT_SECRET=""
+DEEZER_APP_ID=""
+DEEZER_APP_SECRET=""
